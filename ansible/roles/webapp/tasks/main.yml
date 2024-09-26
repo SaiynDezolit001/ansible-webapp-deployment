@@ -1,0 +1,81 @@
+---
+- name: Добавление GPG ключа Docker
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Добавление Docker репозитория
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+    filename: docker
+
+- name: Удаление проблемного репозитория Microsoft (если он существует)
+  file:
+    path: /etc/apt/sources.list.d/mssql-server-2022.list
+    state: absent
+
+- name: Обновление apt cache
+  apt:
+    update_cache: yes
+
+- name: Установка Docker и Docker Compose
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+
+- name: Создание директории /srv/docker
+  file:
+    path: /srv/docker
+    state: directory
+    mode: '0755'
+
+- name: Создание директории /srv/docker/php
+  file:
+    path: /srv/docker/php
+    state: directory
+    mode: '0755'
+
+- name: Создание Dockerfile для PHP
+  copy:
+    content: |
+      FROM php:7.4-fpm
+      COPY . /var/www/html
+    dest: /srv/docker/php/Dockerfile
+
+- name: Создание директории /srv/docker/nginx
+  file:
+    path: /srv/docker/nginx
+    state: directory
+    mode: '0755'
+
+- name: Создание Dockerfile для Nginx
+  copy:
+    content: |
+      FROM nginx:latest
+      COPY nginx.conf /etc/nginx/conf.d/default.conf
+    dest: /srv/docker/nginx/Dockerfile
+
+- name: Копирование конфигурационного файла Nginx в контекст сборки
+  copy:
+    src: /srv/docker/nginx.conf
+    dest: /srv/docker/nginx/nginx.conf
+
+- name: Копирование docker-compose.yml
+  copy:
+    src: files/docker-compose.yml
+    dest: /srv/docker/docker-compose.yml
+
+- name: Генерация конфигурационного файла Nginx
+  template:
+    src: templates/nginx.conf.j2
+    dest: /srv/docker/nginx.conf
+
+- name: Запуск Docker Compose
+  command: docker compose up -d
+  args:
+    chdir: /srv/docker/
